@@ -4,7 +4,7 @@ const DECKS = ["H", "D", "S", "C"];
 // Util Types
 export type CARD = "JK" | "GU" | `${"A" | "2"| "3"| "4"| "5"| "6"| "7"| "8"| "9" | "10" | "J" | "K" | "Q"}${"H" | "D" | "S" | "C"}`;
 export type PIT = "SPECIAL" | "HIGH-D" | "HIGH-S" | "HIGH-C" | "HIGH-H" | "LOW-D" | "LOW-S" | "LOW-C" | "LOW-H";
-export type PLAYER = `P${number}` | TEAM;
+export type PLAYERID = `P${number}` | TEAM;
 export type TEAM = "Team1" | "Team2";
 
 interface Call {
@@ -13,18 +13,14 @@ interface Call {
 
 export interface CardCall extends Call {
 	type: "CARD",
-	player: PLAYER,
+	player: PLAYERID,
 	card: CARD,
 }
 
 export interface PitCall extends Call {
 	type: "PIT",
-	pit: string,
-	card1: CardCall;
-	card2?: CardCall;
-	card3?: CardCall;
-	card4?: CardCall;
-	card5?: CardCall;
+	pit: PIT,
+	cardCalls: CardCall[],
 }
 
 export type RESPONSE_TYPES = "PIT_BURN" | "PIT_DROP" | "CALL_SUCCESS" | "CALL_FAIL";
@@ -42,10 +38,10 @@ class Response {
 }
 
 export class PitBurnResponse extends Response {
-	public player: PLAYER;
+	public player: PLAYERID;
 	public teamToTakeCall: TEAM;
 
-	constructor(pit: PIT, player: PLAYER, team: TEAM) {
+	constructor(pit: PIT, player: PLAYERID, team: TEAM) {
 		super("PIT_BURN", `The pit of ${pit} was burned by ${player}`);
 
 		this.player = player;
@@ -53,12 +49,22 @@ export class PitBurnResponse extends Response {
 	}
 }
 
+export class PitDropResponse extends Response {
+	public player: PLAYERID;
+
+	constructor(pit: PIT, player: PLAYERID) {
+		super("PIT_DROP", `The pit of ${pit} was dropped by ${player}`);
+
+		this.player = player;
+	}
+}
+
 export class CallSuccessResponse extends Response {
-	public caller: PLAYER;
-	public called: PLAYER;
+	public caller: PLAYERID;
+	public called: PLAYERID;
 	public card: CARD;
 
-	constructor(card: CARD, caller: PLAYER, called: PLAYER) {
+	constructor(card: CARD, caller: PLAYERID, called: PLAYERID) {
 		super("CALL_SUCCESS", `${card} was taken by ${caller} from ${called}`);
 
 		this.caller = caller;
@@ -68,11 +74,11 @@ export class CallSuccessResponse extends Response {
 }
 
 export class CallFailResponse extends Response {
-	public caller: PLAYER;
-	public called: PLAYER;
+	public caller: PLAYERID;
+	public called: PLAYERID;
 	public card: CARD;
 
-	constructor(card: CARD, caller: PLAYER, called: PLAYER) {
+	constructor(card: CARD, caller: PLAYERID, called: PLAYERID) {
 		super("CALL_FAIL", `${caller} asked for ${card} from ${called} but did not get it`);
 
 		this.caller = caller;
@@ -107,7 +113,7 @@ function shuffleCards(cardPool: string[]) {
 	return cardPool;
 }
 
-export function randomDeck(): Map<PLAYER, CARD[]> {
+export function randomDeck(): Map<PLAYERID, CARD[]> {
 	const deck = new Map();
 
 	const cardPool = getCardPool();
@@ -119,6 +125,7 @@ export function randomDeck(): Map<PLAYER, CARD[]> {
 	for(let i = 0; i < shuffledDeck.length; i++)
 		decks[i % 6].push(shuffledDeck[i]);
 
+	console.log(decks);
 	for(let i = 0; i < decks.length; i++)
 		deck.set(`P${i + 1}`, decks[i]);
 
