@@ -1,4 +1,4 @@
-import { randomDeck, CardCall, PitCall, getPitMaps, PIT, CARD, PLAYERID, PitBurnResponse, joinArrays, CallSuccessResponse, CallFailResponse, PitDropResponse } from "./Util";
+import { randomDeck, CardCall, PitCall, getPitMaps, PIT, CARD, PLAYERID, PitBurnResponse, joinArrays, CallSuccessResponse, CallFailResponse, PitDropResponse, TakeCallResponse } from "./Util";
 
 export class LiteratureGame {
 	private _playersToIDMap: Map<string, PLAYERID> = new Map();
@@ -8,21 +8,29 @@ export class LiteratureGame {
 	private _cardToPlayerID: Map<CARD, PLAYERID> = new Map();
 	private _pitMaps = getPitMaps();
 
-	public teamPoints = {
-		Team1: 0,
-		Team2: 0,
-	};
+	public teamPoints = {};
+	public teams;
+	public logs: (PitBurnResponse | PitDropResponse | CallSuccessResponse | CallFailResponse | TakeCallResponse)[] = [];
+	public permissionToLog = true;
 
 
 	/**
 	 * Initialises the literature game class
 	 * @param players The names of the players who are participating in the current game, the first 3 belong in Team 1 and the other 3 belong in Team 2
 	 */
-	constructor(players: string[]) {
+	constructor(players: string[], teams: string[] = ["Team1", "Team2"]) {
 		for(let i = 1; i <= players.length; i++) {
 			this._playersToIDMap.set(players[i - 1], `P${i}`);
 			this._IDToPlayersMap.set(`P${i}`, players[i - 1]);
 		}
+
+		this.teams = teams;
+		if(this.teams.length !== 2) throw new Error("Either provide 2 team names, or stick to default names");
+
+		// @ts-expect-error
+		this.teamPoints[teams[0]] = 0;
+		// @ts-expect-error
+		this.teamPoints[teams[1]] = 0;
 	}
 
 
@@ -62,36 +70,14 @@ export class LiteratureGame {
 	 * Returns the cards in the pit you need
 	 * @param pit The pit whose cards you want to know
 	 * @returns the cards which belong in that pit
-	 */
+	*/
 	public getCardsOfPit(pit: PIT) {
 		return this._pitMaps.cardsPerPit.get(pit) as CARD[];
 	}
 
 
-	/**
-	 * To get the playing cards of a player
-	 * @param pName The name of the player whose cards you wanna know
-	 */
-	public getCards(pName: string = "") {
-		return this.__getCards(this._playersToIDMap.get(pName)) as CARD[];
-	}
-
-
-	/**
-	 * The private method to get the playing cards of a player
-	 * Takes in the player IDs
-	 * @param player Defaults to the player whose turn it is
-	 * @returns
-	 */
-	private __getCards(player?: PLAYERID) {
-		return this._players_deck.get(
-			player ?? this._currentTurn,
-		) as CARD[];
-	}
-
-
 	public makeCall(input: CardCall | PitCall) {
-		if(this._currentTurn === "Team1" || this._currentTurn === "Team2") throw new Error("Current player not decided.");
+		if(this.teams.includes(this._currentTurn)) throw new Error("Current player not decided.");
 
 		if(input.type === "CARD") {
 			// pit burn if player does not have a card of the pit or calls a card they already have
@@ -110,12 +96,28 @@ export class LiteratureGame {
 				this.__modifyPlayerCards("ADD", this._currentTurn, input.card);
 				this.__modifyPlayerCards("REMOVE", input.player, input.card);
 
-				return new CallSuccessResponse(input.card, this._currentTurn, oppPlayer);
+				const callSuccessResp = {
+					type: "CALL_SUCCESS",
+					message: `${this._currentTurn} collected ${input.card} from ${input.player} successfully`,
+					calledCard: input.card,
+					calledPlayer: input.player,
+					callingPlayer: this._currentTurn,
+				} as CallSuccessResponse;
+
+				return this.__log(callSuccessResp);
 			}
 
 			// The opponent does not have the card
 			this._currentTurn = oppPlayer;
-			return new CallFailResponse(input.card, this._currentTurn, oppPlayer);
+			const callFailResp = {
+				type: "CALL_FAIL",
+				message: `${this._currentTurn} did not get ${input.card} from ${input.player}`,
+				calledCard: input.card,
+				calledPlayer: input.player,
+				callingPlayer: this._currentTurn,
+			} as CallFailResponse;
+
+			return this.__log(callFailResp);
 		}
 
 		if(input.type === "PIT") {
@@ -159,6 +161,46 @@ export class LiteratureGame {
 	}
 
 
+	/**
+	 * To get the playing cards of a player
+	 * @param pName The name of the player whose cards you wanna know
+	*/
+	public getCards(pName: string = "") {
+		return this.__getCards(this._playersToIDMap.get(pName)) as CARD[];
+	}
+
+
+	public takeCall(player: string) {
+		const proposedPlayer = this._playersToIDMap.get(player) as PLAYERID;
+
+		if(this._currentTurn !== this.__getTeam(proposedPlayer)) throw new Error("Invalid team member provided");
+
+		this._currentTurn = proposedPlayer;
+
+		const takeCallResp = {
+			type: "TAKE_CALL",
+			player: proposedPlayer,
+			team: this.__getTeam(proposedPlayer),
+			message: `${proposedPlayer} is taking the call for ${this.__getTeam(proposedPlayer)} `,
+		} as TakeCallResponse;
+
+		return this.__log(takeCallResp);
+	}
+
+
+	/**
+	 * The private method to get the playing cards of a player
+	 * Takes in the player IDs
+	 * @param player Defaults to the player whose turn it is
+	 * @returns
+	 */
+	private __getCards(player?: PLAYERID) {
+		return this._players_deck.get(
+			player ?? this._currentTurn,
+		) as CARD[];
+	}
+
+
 	private __getPitDistribution(pit: PIT) {
 		const pitDist = {};
 
@@ -171,6 +213,7 @@ export class LiteratureGame {
 
 		return pitDist;
 	}
+
 
 	private __removePlayingCards(pit: PIT) {
 		const currentPitCards = this.getCardsOfPit(pit);
@@ -185,6 +228,7 @@ export class LiteratureGame {
 		}
 	}
 
+
 	private __modifyPlayerCards(type: "ADD" | "REMOVE", player: PLAYERID, card: CARD) {
 		this._players_deck.set(player, type === "ADD" ?
 			joinArrays(this.__getCards(player), [card]) : this.__getCards(player).filter(c => c !== card));
@@ -192,26 +236,49 @@ export class LiteratureGame {
 		if(type === "ADD") this._cardToPlayerID.set(card, player);
 	}
 
+
 	private __pitBurn(burntPit: PIT, burningPlayer?: PLAYERID) {
 		burningPlayer ??= this._currentTurn;
 		const pitDist = this.__getPitDistribution(burntPit);
 
 		const oppTeam = this.__getOppTeam(burningPlayer);
-		this.teamPoints[oppTeam]++;
+		// @ts-ignore
+		this.teamPoints[oppTeam as keyof typeof this.teamPoints]++;
 		this._currentTurn = oppTeam;
 
-		return new PitBurnResponse(burntPit, burningPlayer, this.__getTeam(burningPlayer));
+		const pitBurnResp = {
+			type: "PIT_BURN",
+			message: `${burningPlayer} has burned the pit ${burntPit}`,
+			burningPlayer,
+			burningTeam: this.__getTeam(burningPlayer),
+			burntPit,
+			pitDistribution: pitDist,
+		} as PitBurnResponse;
+
+		return this.__log(pitBurnResp);
 	}
+
 
 	private __pitDrop(droppedPit: PIT, droppingPlayer?: PLAYERID) {
 		droppingPlayer ??= this._currentTurn;
 		const pitDist = this.__getPitDistribution(droppedPit);
 
 		const team = this.__getTeam(droppingPlayer);
-		this.teamPoints[team]++;
+		// @ts-ignore
+		this.teamPoints[team as keyof typeof this.teamPoints]++;
 
-		return new PitDropResponse(droppedPit, droppingPlayer);
+		const pitDropResp = {
+			type: "PIT_DROP",
+			droppedPit,
+			droppingPlayer,
+			droppingTeam: team,
+			message: `${droppingPlayer} has dropped the pit ${droppedPit}`,
+			pitDistribution: pitDist,
+		} as PitDropResponse;
+
+		return this.__log(pitDropResp);
 	}
+
 
 	private __hasCardOfPit(card: CARD): boolean {
 		const pitCards = this.getCardsOfPit(this.getPitFromCard(card));
@@ -223,19 +290,22 @@ export class LiteratureGame {
 		return false;
 	}
 
+
 	private __getTeam(player: PLAYERID) {
-		return Number(player[1]) > 3 ? "Team2" : "Team1";
+		return Number(player[1]) > 3 ? this.teams[1] : this.teams[0];
 	}
+
 
 	private __getOppTeam(player: PLAYERID) {
-		return Number(player[1]) > 3 ? "Team1" : "Team2";
+		return Number(player[1]) > 3 ? this.teams[0] : this.teams[1];
 	}
 
-	public takeCall(player: string) {
-		const proposedPlayer = this._playersToIDMap.get(player) as PLAYERID;
 
-		if(this._currentTurn !== this.__getTeam(proposedPlayer)) throw new Error("Invalid team member provided");
+	private __log(response: PitBurnResponse | PitDropResponse | CallSuccessResponse | CallFailResponse | TakeCallResponse) {
+		if(!this.permissionToLog) return;
 
-		this._currentTurn = proposedPlayer;
+		this.logs.push(response);
+
+		return response;
 	}
 }

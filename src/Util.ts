@@ -4,7 +4,7 @@ const DECKS = ["H", "D", "S", "C"];
 // Util Types
 export type CARD = "JK" | "GU" | `${"A" | "2"| "3"| "4"| "5"| "6"| "7"| "8"| "9" | "10" | "J" | "K" | "Q"}${"H" | "D" | "S" | "C"}`;
 export type PIT = "SPECIAL" | "HIGH-D" | "HIGH-S" | "HIGH-C" | "HIGH-H" | "LOW-D" | "LOW-S" | "LOW-C" | "LOW-H";
-export type PLAYERID = `P${number}` | TEAM;
+export type PLAYERID = `P${number}` | string;
 export type TEAM = "Team1" | "Team2";
 
 interface Call {
@@ -23,68 +23,49 @@ export interface PitCall extends Call {
 	cardCalls: CardCall[],
 }
 
-export type RESPONSE_TYPES = "PIT_BURN" | "PIT_DROP" | "CALL_SUCCESS" | "CALL_FAIL";
+export type RESPONSE_TYPES = "PIT_BURN" | "PIT_DROP" | "CALL_SUCCESS" | "CALL_FAIL" | "TAKE_CALL";
 
 // Response Classes
 
-class Response {
-	public type: RESPONSE_TYPES;
-	public message: string;
-
-	constructor(type: RESPONSE_TYPES, message: string) {
-		this.type = type;
-		this.message = message;
-	}
+interface Response {
+	type: RESPONSE_TYPES;
+	message: string;
 }
 
-export class PitBurnResponse extends Response {
-	public player: PLAYERID;
-	public teamToTakeCall: TEAM;
-
-	constructor(pit: PIT, player: PLAYERID, team: TEAM) {
-		super("PIT_BURN", `The pit of ${pit} was burned by ${player}`);
-
-		this.player = player;
-		this.teamToTakeCall = team;
-	}
+export interface TakeCallResponse extends Response {
+	type: "TAKE_CALL";
+	team: TEAM;
+	player: PLAYERID;
 }
 
-export class PitDropResponse extends Response {
-	public player: PLAYERID;
-
-	constructor(pit: PIT, player: PLAYERID) {
-		super("PIT_DROP", `The pit of ${pit} was dropped by ${player}`);
-
-		this.player = player;
-	}
+export interface PitBurnResponse extends Response {
+	type: "PIT_BURN";
+	burningTeam: TEAM;
+	burningPlayer: PLAYERID;
+	burntPit: PIT,
+	pitDistribution: object;
 }
 
-export class CallSuccessResponse extends Response {
-	public caller: PLAYERID;
-	public called: PLAYERID;
-	public card: CARD;
-
-	constructor(card: CARD, caller: PLAYERID, called: PLAYERID) {
-		super("CALL_SUCCESS", `${card} was taken by ${caller} from ${called}`);
-
-		this.caller = caller;
-		this.called = called;
-		this.card = card;
-	}
+export interface PitDropResponse extends Response {
+	type: "PIT_DROP";
+	droppingTeam: TEAM;
+	droppingPlayer: PLAYERID;
+	droppedPit: PIT,
+	pitDistribution: object;
 }
 
-export class CallFailResponse extends Response {
-	public caller: PLAYERID;
-	public called: PLAYERID;
-	public card: CARD;
+export interface CallFailResponse extends Response {
+	type: "CALL_FAIL";
+	callingPlayer: PLAYERID;
+	calledPlayer: PLAYERID;
+	calledCard: CARD;
+}
 
-	constructor(card: CARD, caller: PLAYERID, called: PLAYERID) {
-		super("CALL_FAIL", `${caller} asked for ${card} from ${called} but did not get it`);
-
-		this.caller = caller;
-		this.called = called;
-		this.card = card;
-	}
+export interface CallSuccessResponse extends Response {
+	type: "CALL_SUCCESS";
+	callingPlayer: PLAYERID;
+	calledPlayer: PLAYERID;
+	calledCard: CARD;
 }
 
 // Util Functions
@@ -125,7 +106,6 @@ export function randomDeck(): Map<PLAYERID, CARD[]> {
 	for(let i = 0; i < shuffledDeck.length; i++)
 		decks[i % 6].push(shuffledDeck[i]);
 
-	console.log(decks);
 	for(let i = 0; i < decks.length; i++)
 		deck.set(`P${i + 1}`, decks[i]);
 
