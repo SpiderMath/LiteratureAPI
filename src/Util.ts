@@ -7,11 +7,9 @@ type TURN = PLAYER_ID | TEAM;
 type BURN_TYPE = "BAD_CARD_CALL" | "BAD_DROP_CALL" | "PIT_CALL_FAIL";
 type DROP_TYPE = "SELF_PIT_DROP" | "COLLECTIVE_PIT_DROP";
 type PIT = "SPECIAL" | "DIAMOND_LOW" | "DIAMOND_HIGH" | "SPADE_LOW" | "SPADE_HIGH" | "CLUB_HIGH" | "CLUB_LOW" | "HEART_HIGH" | "HEART_LOW";
-type LOG = PIT_DROP_LOG | PIT_BURN_LOG | CHANGE_PLAYER_LOG | CARD_CALL_SUCCESS_LOG | CARD_CALL_FAILURE_LOG;
 
 interface BASE_LOG {
 	type: "PIT_DROP" | "PIT_BURN" | "CHANGE_PLAYER" | "CARD_CALL_SUCCESS" | "CARD_CALL_FAILURE",
-	message: string,
 }
 
 interface PIT_DROP_LOG extends BASE_LOG{
@@ -83,7 +81,6 @@ export {
 	DROP_TYPE,
 	CLAIM,
 	PIT,
-	LOG,
 	PIT_DROP_LOG,
 	PIT_BURN_LOG,
 	CARD_CALL_FAILURE_LOG,
@@ -183,6 +180,11 @@ function shuffleDeck(deck: Card[]) {
 	return deck;
 }
 
+/**
+ * @description Divides the array containing the shuffled deck into an object having the 6 sub-arrays as entries, with the player IDs 1-6 as keys
+ * Each sub-array contains 9 elements, the hand of the player associated with the respective player ID
+ * @param shuffledDeck Takes
+ */
 function divideDeck(shuffledDeck: Card[]) {
 	const hands: HANDS = {
 		1: [],
