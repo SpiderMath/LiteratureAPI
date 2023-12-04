@@ -1,4 +1,4 @@
-import { HANDS, TURN, divideDeck, generateDeck, shuffleDeck, Call, CardCall, PLAYER_ID, Card, CARD_SUIT, CARD_RANK, TEAM, BURN_TYPE, PitCall, CLAIM, PIT, DROP_TYPE } from "./Util";
+import { HANDS, TURN, divideDeck, generateDeck, shuffleDeck, Call, CardCall, PLAYER_ID, Card, CARD_SUIT, CARD_RANK, TEAM, BURN_TYPE, PitCall, CLAIM, PIT, DROP_TYPE, PIT_DROP_LOG, PIT_BURN_LOG, joinArrays, CARD_CALL_SUCCESS_LOG, CARD_CALL_FAILURE_LOG, PLAYER_CHANGE_LOG } from "./Util";
 
 // TODO: Return logs for the various actions taken
 
@@ -25,11 +25,13 @@ export class LiteratureGame {
 	 */
 	public cardRegister;
 	/**
-	 * @description Stores the scores of each of the teams
+	 * @description Stores the pits dropped by each of the teams
+	 * Updated only during a pit burn, or a pit drop
+	 * Read to check whether the game is over & also return the current scoreboard
 	 */
-	public scoreRegister = {
-		T1: 0,
-		T2: 0,
+	public pitRegister = {
+		T1: [] as PIT[],
+		T2: [] as PIT[],
 	};
 
 	constructor() {
@@ -60,6 +62,7 @@ export class LiteratureGame {
 			 * (2) Pit Burn
 			 *     (i) Calling a card of a pit whose card you do not own
 			 *     (ii) Calling a player of the same team
+			 * 	   (iii) Calling a card you already own
 			 * (3) CardCallSuccess- The requested person has the card
 			 * (4) CardCallFailure- The requested person does not have the card
 			 */
@@ -83,8 +86,8 @@ export class LiteratureGame {
 				if(this.getCardOwner(pitCard) === caller)
 					dumbCall = false;
 
-			// if a person calls a person of their own team, that's also a pitburn (Reason 2-ii)
-			if(this._getTeam(caller) === this._getTeam(requested))
+			// if a person calls a person of their own team, that's also a pitburn (Reason 2-ii & 2-iii)
+			if(this._getTeam(caller) === this._getTeam(requested) || this.getHand(caller).includes(card))
 				dumbCall = true;
 
 			// Reason (2)
@@ -97,7 +100,7 @@ export class LiteratureGame {
 				return this._cardCallSuccess(caller, requested, card);
 			else
 				// Reason (4)
-				return this._cardCallFailure(requested);
+				return this._cardCallFailure(requested, card);
 		}
 		if(call instanceof PitCall) {
 			// implementation of a Pit Call!
@@ -283,6 +286,27 @@ export class LiteratureGame {
 	}
 
 	/**
+	 * @description Returns the current scoreboard of the literature game
+	 */
+	get getScoreBoard() {
+		return {
+			T1: this.pitRegister["T1"].length,
+			T2: this.pitRegister["T2"].length,
+		};
+	}
+
+	/**
+	 * @param team The team who got the point for that pit drop
+	 * @param pit The pit which got dropped / burned
+	 * @description This updates the list of pits dropped by either teams
+	 * @returns The total number of pits dropped by either teams
+	 */
+	private _updateScore(team: TEAM, pit: PIT) {
+		this.pitRegister[team].push(pit);
+		return this.getScoreBoard.T1 + this.getScoreBoard.T2;
+	}
+
+	/**
 	 * @param player The player whose hand is required
 	 * @description Returns the hand of the specified player
 	 */
@@ -358,6 +382,25 @@ export class LiteratureGame {
 		return ((player > 3) ? "T2" : "T1") as TURN;
 	}
 
+	/**
+		 * @param player The player who will get the next turn
+		 * @description Changes the player whose turn it is.
+		 * @summary If there is a pit drop (where the player exhausts their cards), or conversely a pit burn, then the corresponding team gets the next call, and this function is used to pick the player who'll make the next call!
+		 */
+	public changePlayer(player: PLAYER_ID) {
+		// in case the player input isn't of the same team
+		if(this.currentPlayer !== this._getTeam(player))
+			throw new Error(`The current turn is that of team ${this.currentPlayer}, hence the chances can be passed to only players of that team`);
+
+		this.currentPlayer = player;
+
+		return {
+			type: "PLAYER_CHANGE",
+			newPlayer: this.currentPlayer,
+			team: this.currentTeam,
+		} as PLAYER_CHANGE_LOG;
+	}
+
 	// Methods implementing the different results
 	/**
 	 * @param caller The person who called the card
@@ -369,30 +412,29 @@ export class LiteratureGame {
 		// Remove card from the hand of the current owner and move to opponent
 		this._removeCardFromHand(requested, card);
 		this._addCardToHand(caller, card);
-		return;
-	}
-
-	/**
-	 * @param player The player who will get the next turn
-	 * @description Changes the player whose turn it is.
-	 * @summary If there is a pit drop (where the player exhausts their cards), or conversely a pit burn, then the corresponding team gets the next call, and this function is used to pick the player who'll make the next call!
-	 */
-	public changePlayer(player: PLAYER_ID) {
-		if(this.currentPlayer === this._getTeam(player))
-			throw new Error(`The current turn is that of team ${this.currentPlayer}, hence the chances can be passed to only players of that team`);
-
-		return this.currentPlayer = player;
+		return {
+			type: "CARD_CALL_SUCCESS",
+			caller,
+			card,
+			requested,
+		} as CARD_CALL_SUCCESS_LOG;
 	}
 
 	/**
 	 * @param requested The person from whom the card was asked
 	 * @description Implementation for when a card call fails
 	 */
-	private _cardCallFailure(requested: PLAYER_ID) {
+	private _cardCallFailure(requested: PLAYER_ID, card: Card) {
+		const caller = this.currentPlayer;
 		this.currentPlayer = requested;
 		this._changeTeam();
 
-		return;
+		return {
+			type: "CARD_CALL_FAILURE",
+			caller,
+			card,
+			requested,
+		} as CARD_CALL_FAILURE_LOG;
 	}
 
 	/**
@@ -416,11 +458,40 @@ export class LiteratureGame {
 		else
 			pitCards = this.getPitCards(data[0].card);
 
+		// Giving the opponent points
+		this._updateScore(this.currentTeam, this.getPit(pitCards[0]));
+
 		for(const pitCard of pitCards)
 			this._removeCardFromHand(
 				this.getCardOwner(pitCard),
 				pitCard,
 			);
+
+		return {
+			type: "PIT_BURN",
+			pitBurnType: type,
+			pit: this.getPit(pitCards[0]),
+			user: burner,
+			/**
+			 * If its a bad card call pitburn, that means the player called a card of a pit whose cards they didn't have / called the card which they themselves had.
+			 * if it's a bad drop call pitburn, that means the player did not have a card of that pit to try and drop the pit
+			 * otherwise, they couldn't account for one particular card (the function only passes in the calls to other players they made, so we need to add the other cards as cards they claimed to own)
+			 */
+			claims: type === "BAD_CARD_CALL"
+				? null : type === "BAD_DROP_CALL"
+					? (data as Card[]).map((card) => {
+						return {
+							card,
+							player: burner,
+						} as CLAIM;
+					}) : joinArrays(
+						data as CLAIM[],
+						pitCards.filter((card) => {
+							const dataCards = (data as CLAIM[]).map(claim => claim.card);
+							return dataCards.includes(card);
+						}),
+					),
+		} as PIT_BURN_LOG;
 	}
 
 	/**
@@ -436,6 +507,9 @@ export class LiteratureGame {
 			claims[0] instanceof Card ? claims[0] : claims[0].card,
 		);
 
+		// giving points to the team of the player
+		this._updateScore(this.currentTeam, this.getPit(pitCards[0]));
+
 		for(const pitCard of pitCards)
 			this._removeCardFromHand(
 				this.getCardOwner(pitCard),
@@ -445,5 +519,13 @@ export class LiteratureGame {
 		// incase the player who dropped the pit is out of cards, someone in the team needs to pick the call up.
 		if(this.getHand(caller).length === 0)
 			this.currentPlayer = this.currentTeam;
+
+		return {
+			claims,
+			pit: this.getPit(pitCards[0]),
+			pitDropType: type,
+			type: "PIT_DROP",
+			user: caller,
+		} as PIT_DROP_LOG;
 	}
 }

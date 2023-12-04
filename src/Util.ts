@@ -9,7 +9,7 @@ type DROP_TYPE = "SELF_PIT_DROP" | "COLLECTIVE_PIT_DROP";
 type PIT = "SPECIAL" | "DIAMOND_LOW" | "DIAMOND_HIGH" | "SPADE_LOW" | "SPADE_HIGH" | "CLUB_HIGH" | "CLUB_LOW" | "HEART_HIGH" | "HEART_LOW";
 
 interface BASE_LOG {
-	type: "PIT_DROP" | "PIT_BURN" | "CHANGE_PLAYER" | "CARD_CALL_SUCCESS" | "CARD_CALL_FAILURE",
+	type: "PIT_DROP" | "PIT_BURN" | "CHANGE_PLAYER" | "CARD_CALL_SUCCESS" | "CARD_CALL_FAILURE" | "PLAYER_CHANGE",
 }
 
 interface PIT_DROP_LOG extends BASE_LOG{
@@ -25,10 +25,10 @@ interface PIT_BURN_LOG extends BASE_LOG {
 	type: "PIT_BURN",
 	user: PLAYER_ID,
 	/** Note: claims should include all claims + self-claims */
-	claims: CLAIM[],
+	// it will be null when it's a bad card call
+	claims: CLAIM[] | null,
 	pit: PIT,
 	pitBurnType: BURN_TYPE,
-	mistakeMade: string,
 }
 
 interface CHANGE_PLAYER_LOG extends BASE_LOG {
@@ -49,6 +49,12 @@ interface CARD_CALL_FAILURE_LOG extends BASE_LOG {
 	caller: PLAYER_ID,
 	requested: PLAYER_ID,
 	card: Card,
+}
+
+interface PLAYER_CHANGE_LOG extends BASE_LOG {
+	type: "PLAYER_CHANGE",
+	team: TEAM,
+	newPlayer: PLAYER_ID,
 }
 
 interface CardInput {
@@ -86,6 +92,7 @@ export {
 	CARD_CALL_FAILURE_LOG,
 	CARD_CALL_SUCCESS_LOG,
 	CHANGE_PLAYER_LOG,
+	PLAYER_CHANGE_LOG,
 };
 
 // Classes
@@ -203,8 +210,20 @@ function divideDeck(shuffledDeck: Card[]) {
 	return hands;
 }
 
+function joinArrays(...inputs) {
+	// I'm aware using any will get me murdered but I'm a noob in TypeScript, sorry guys
+	const res: any[] = [];
+
+	for(const arr of inputs)
+		for(const elem of arr)
+			res.push(elem);
+
+	return res;
+}
+
 export {
 	generateDeck,
 	shuffleDeck,
 	divideDeck,
+	joinArrays,
 };
