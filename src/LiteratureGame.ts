@@ -52,7 +52,7 @@ export class LiteratureGame {
 	/**
 	 * @description Implementation for making a call, both for pits and cards via their different classes
 	 */
-	public makeCall(call: Call) {
+	public makeCall(call: Call): CARD_CALL_FAILURE_LOG | CARD_CALL_SUCCESS_LOG | PIT_BURN_LOG | PIT_DROP_LOG {
 		if(call instanceof CardCall) {
 			// implementation of a Card Call!
 
@@ -161,6 +161,8 @@ export class LiteratureGame {
 				// Reason (1-ii)
 				return this._pitDrop(caller, "COLLECTIVE_PIT_DROP", claims);
 		}
+
+		throw new Error("Invalid input, please check what's wrong");
 	}
 
 	// Utility functions
@@ -387,7 +389,7 @@ export class LiteratureGame {
 	 * @description Changes the player whose turn it is.
 	 * @summary If there is a pit drop (where the player exhausts their cards), or conversely a pit burn, then the corresponding team gets the next call, and this function is used to pick the player who'll make the next call!
 	 */
-	public changePlayer(player: PLAYER_ID) {
+	public changePlayer(player: PLAYER_ID): PLAYER_CHANGE_LOG {
 		// in case the player input isn't of the same team
 		if(this.currentPlayer !== this._getTeam(player))
 			throw new Error(`The current turn is that of team ${this.currentPlayer}, hence the chances can be passed to only players of that team`);
