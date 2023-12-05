@@ -383,10 +383,10 @@ export class LiteratureGame {
 	}
 
 	/**
-		 * @param player The player who will get the next turn
-		 * @description Changes the player whose turn it is.
-		 * @summary If there is a pit drop (where the player exhausts their cards), or conversely a pit burn, then the corresponding team gets the next call, and this function is used to pick the player who'll make the next call!
-		 */
+	 * @param player The player who will get the next turn
+	 * @description Changes the player whose turn it is.
+	 * @summary If there is a pit drop (where the player exhausts their cards), or conversely a pit burn, then the corresponding team gets the next call, and this function is used to pick the player who'll make the next call!
+	 */
 	public changePlayer(player: PLAYER_ID) {
 		// in case the player input isn't of the same team
 		if(this.currentPlayer !== this._getTeam(player))
